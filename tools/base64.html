@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Base64 Encode/Decode</title>
+  <meta name="description" content="Encode or decode Base64 values directly in the browser">
+  <style>
+    :root {
+      --bg:         #1e1e2e;
+      --surface:    #2a2a3d;
+      --accent:     #7c6af7;
+      --text:       #cdd6f4;
+      --text-muted: #6c7086;
+      --border:     #313244;
+      --success:    #a6e3a1;
+      --error:      #f38ba8;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 1rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    header a { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; }
+    header a:hover { color: var(--accent); }
+    header h1 { margin: 0; font-size: 1.2rem; }
+
+    main {
+      padding: 2rem;
+      max-width: 900px;
+      margin: 0 auto;
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.5rem 1.25rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: opacity 0.15s;
+    }
+
+    button:hover { opacity: 0.85; }
+
+    button.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .panes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    @media (max-width: 640px) {
+      .panes { grid-template-columns: 1fr; }
+    }
+
+    .pane label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    textarea {
+      width: 100%;
+      height: 280px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+      padding: 0.75rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus { border-color: var(--accent); }
+
+    .status {
+      font-size: 0.8rem;
+      min-height: 1.2rem;
+    }
+
+    .status.ok  { color: var(--success); }
+    .status.err { color: var(--error); }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">← back</a>
+    <h1>Base64 Encode / Decode</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <button id="btn-encode">Encode →</button>
+      <button id="btn-decode">← Decode</button>
+      <button class="secondary" id="btn-swap">Swap</button>
+      <button class="secondary" id="btn-clear">Clear</button>
+    </div>
+
+    <div class="panes">
+      <div class="pane">
+        <label for="input">Input (plain text)</label>
+        <textarea id="input" placeholder="Paste plain text here…" spellcheck="false"></textarea>
+      </div>
+      <div class="pane">
+        <label for="output">Output (Base64)</label>
+        <textarea id="output" placeholder="Base64 output will appear here…" spellcheck="false"></textarea>
+      </div>
+    </div>
+
+    <div class="status" id="status"></div>
+  </main>
+
+  <script>
+    const inputEl  = document.getElementById('input');
+    const outputEl = document.getElementById('output');
+    const statusEl = document.getElementById('status');
+
+    function setStatus(msg, type = '') {
+      statusEl.textContent = msg;
+      statusEl.className = `status ${type}`;
+    }
+
+    document.getElementById('btn-encode').onclick = () => {
+      try {
+        outputEl.value = btoa(unescape(encodeURIComponent(inputEl.value)));
+        setStatus('Encoded successfully.', 'ok');
+      } catch (e) {
+        setStatus(`Encode error: ${e.message}`, 'err');
+      }
+    };
+
+    document.getElementById('btn-decode').onclick = () => {
+      try {
+        inputEl.value = decodeURIComponent(escape(atob(outputEl.value.trim())));
+        setStatus('Decoded successfully.', 'ok');
+      } catch (e) {
+        setStatus(`Decode error: invalid Base64 input.`, 'err');
+      }
+    };
+
+    document.getElementById('btn-swap').onclick = () => {
+      [inputEl.value, outputEl.value] = [outputEl.value, inputEl.value];
+      setStatus('');
+    };
+
+    document.getElementById('btn-clear').onclick = () => {
+      inputEl.value = '';
+      outputEl.value = '';
+      setStatus('');
+    };
+
+    // Auto-encode as user types
+    inputEl.addEventListener('input', () => {
+      if (!inputEl.value) { outputEl.value = ''; setStatus(''); return; }
+      try {
+        outputEl.value = btoa(unescape(encodeURIComponent(inputEl.value)));
+        setStatus('');
+      } catch { /* ignore partial input */ }
+    });
+  </script>
+</body>
+</html>

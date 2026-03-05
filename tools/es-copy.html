@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elasticsearch Cluster Copy</title>
+  <meta name="description" content="Copy documents between Elasticsearch clusters via the backend CORS proxy">
+  <style>
+    :root {
+      --bg:         #1e1e2e;
+      --surface:    #2a2a3d;
+      --accent:     #7c6af7;
+      --text:       #cdd6f4;
+      --text-muted: #6c7086;
+      --border:     #313244;
+      --success:    #a6e3a1;
+      --error:      #f38ba8;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 1rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    header a { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; }
+    header a:hover { color: var(--accent); }
+    header h1 { margin: 0; font-size: 1.2rem; }
+
+    main {
+      padding: 2rem;
+      max-width: 860px;
+      margin: 0 auto;
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .proxy-warning {
+      background: color-mix(in srgb, var(--error) 12%, transparent);
+      border: 1px solid var(--error);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      font-size: 0.85rem;
+      color: var(--error);
+      display: none;
+    }
+
+    .proxy-warning.visible { display: block; }
+
+    .clusters {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 640px) {
+      .clusters { grid-template-columns: 1fr; }
+    }
+
+    .cluster-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .cluster-card h2 {
+      margin: 0;
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+
+    .field label {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    input[type="text"], input[type="password"], input[type="number"] {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.875rem;
+      padding: 0.45rem 0.7rem;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+
+    input:focus { border-color: var(--accent); }
+
+    .options-row {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+
+    .options-row .field { flex: 1; min-width: 140px; }
+
+    .toolbar {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.5rem 1.5rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: opacity 0.15s;
+    }
+
+    button:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: default; }
+
+    button.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    button.danger {
+      background: color-mix(in srgb, var(--error) 80%, transparent);
+    }
+
+    .progress-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .progress-bar-track {
+      background: var(--bg);
+      border-radius: 999px;
+      height: 8px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 999px;
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    .progress-stats {
+      display: flex;
+      gap: 1.5rem;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .progress-stats span b { color: var(--text); }
+
+    .log {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem;
+      font-family: monospace;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      height: 180px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .log .ok  { color: var(--success); }
+    .log .err { color: var(--error); }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">← back</a>
+    <h1>Elasticsearch Cluster Copy</h1>
+  </header>
+
+  <main>
+    <div class="proxy-warning" id="proxy-warning">
+      Backend proxy is not available. Start <code>python app.py</code> to use this tool.
+      Direct browser requests to Elasticsearch are blocked by CORS.
+    </div>
+
+    <div class="clusters">
+      <div class="cluster-card">
+        <h2>Source</h2>
+        <div class="field">
+          <label for="src-url">Cluster URL</label>
+          <input type="text" id="src-url" placeholder="http://localhost:9200" value="http://localhost:9200">
+        </div>
+        <div class="field">
+          <label for="src-index">Index name</label>
+          <input type="text" id="src-index" placeholder="my-index">
+        </div>
+        <div class="field">
+          <label for="src-user">Username (optional)</label>
+          <input type="text" id="src-user" placeholder="elastic">
+        </div>
+        <div class="field">
+          <label for="src-pass">Password (optional)</label>
+          <input type="password" id="src-pass" placeholder="">
+        </div>
+      </div>
+
+      <div class="cluster-card">
+        <h2>Destination</h2>
+        <div class="field">
+          <label for="dst-url">Cluster URL</label>
+          <input type="text" id="dst-url" placeholder="http://destination:9200">
+        </div>
+        <div class="field">
+          <label for="dst-index">Index name</label>
+          <input type="text" id="dst-index" placeholder="my-index-copy">
+        </div>
+        <div class="field">
+          <label for="dst-user">Username (optional)</label>
+          <input type="text" id="dst-user" placeholder="elastic">
+        </div>
+        <div class="field">
+          <label for="dst-pass">Password (optional)</label>
+          <input type="password" id="dst-pass" placeholder="">
+        </div>
+      </div>
+    </div>
+
+    <div class="options-row">
+      <div class="field">
+        <label for="batch-size">Batch size (scroll)</label>
+        <input type="number" id="batch-size" value="500" min="10" max="5000">
+      </div>
+      <div class="field">
+        <label for="query">Query filter (JSON, optional)</label>
+        <input type="text" id="query" placeholder='{"match_all":{}}'>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button id="btn-start">Start Copy</button>
+      <button class="secondary danger" id="btn-stop" disabled>Stop</button>
+      <button class="secondary" id="btn-clear-log">Clear log</button>
+    </div>
+
+    <div class="progress-wrap" id="progress-wrap" style="display:none">
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-stats">
+        <span>Copied: <b id="stat-copied">0</b></span>
+        <span>Total: <b id="stat-total">?</b></span>
+        <span>Batches: <b id="stat-batches">0</b></span>
+        <span>Errors: <b id="stat-errors">0</b></span>
+      </div>
+    </div>
+
+    <div class="log" id="log">Ready. Configure source and destination, then click Start Copy.
+</div>
+  </main>
+
+  <script>
+    const PROXY = '/proxy';
+
+    let running  = false;
+    let stopFlag = false;
+
+    const logEl        = document.getElementById('log');
+    const progressWrap = document.getElementById('progress-wrap');
+    const progressFill = document.getElementById('progress-fill');
+    const statCopied   = document.getElementById('stat-copied');
+    const statTotal    = document.getElementById('stat-total');
+    const statBatches  = document.getElementById('stat-batches');
+    const statErrors   = document.getElementById('stat-errors');
+    const btnStart     = document.getElementById('btn-start');
+    const btnStop      = document.getElementById('btn-stop');
+
+    function log(msg, cls = '') {
+      const line = document.createElement('span');
+      if (cls) line.className = cls;
+      line.textContent = `[${new Date().toISOString().slice(11, 19)}] ${msg}\n`;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function checkProxy() {
+      try {
+        const r = await fetch(PROXY, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: 'http://localhost:1', method: 'GET' }),
+          signal: AbortSignal.timeout(1000),
+        });
+        // Any response (even 502) means the proxy is up
+        document.getElementById('proxy-warning').classList.remove('visible');
+        return true;
+      } catch {
+        document.getElementById('proxy-warning').classList.add('visible');
+        return false;
+      }
+    }
+
+    async function proxyRequest(url, method, headers, body) {
+      const resp = await fetch(PROXY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, method, headers, body: body ? JSON.stringify(body) : undefined }),
+      });
+      if (!resp.ok) throw new Error(`Proxy error: ${resp.status}`);
+      return resp.json();
+    }
+
+    function buildAuthHeader(user, pass) {
+      if (!user) return {};
+      return { Authorization: 'Basic ' + btoa(`${user}:${pass}`) };
+    }
+
+    async function runCopy() {
+      const srcUrl   = document.getElementById('src-url').value.replace(/\/$/, '');
+      const srcIndex = document.getElementById('src-index').value.trim();
+      const dstUrl   = document.getElementById('dst-url').value.replace(/\/$/, '');
+      const dstIndex = document.getElementById('dst-index').value.trim();
+      const batchSize = parseInt(document.getElementById('batch-size').value, 10);
+      const queryStr  = document.getElementById('query').value.trim();
+
+      if (!srcUrl || !srcIndex || !dstUrl || !dstIndex) {
+        log('Error: fill in all required fields (cluster URLs and index names).', 'err');
+        return;
+      }
+
+      const srcHeaders = buildAuthHeader(
+        document.getElementById('src-user').value,
+        document.getElementById('src-pass').value
+      );
+      const dstHeaders = buildAuthHeader(
+        document.getElementById('dst-user').value,
+        document.getElementById('dst-pass').value
+      );
+
+      let query;
+      try {
+        query = queryStr ? JSON.parse(queryStr) : { match_all: {} };
+      } catch (e) {
+        log(`Invalid query JSON: ${e.message}`, 'err');
+        return;
+      }
+
+      running  = true;
+      stopFlag = false;
+      btnStart.disabled = true;
+      btnStop.disabled  = false;
+      progressWrap.style.display = '';
+
+      let copied = 0, batches = 0, errors = 0, total = null;
+      statCopied.textContent  = 0;
+      statTotal.textContent   = '?';
+      statBatches.textContent = 0;
+      statErrors.textContent  = 0;
+      progressFill.style.width = '0%';
+
+      log(`Starting copy: ${srcUrl}/${srcIndex} → ${dstUrl}/${dstIndex}`);
+
+      try {
+        // Open scroll
+        const initResp = await proxyRequest(
+          `${srcUrl}/${srcIndex}/_search?scroll=2m`,
+          'POST',
+          { ...srcHeaders, 'Content-Type': 'application/json' },
+          { size: batchSize, query }
+        );
+
+        const initData = JSON.parse(initResp.body);
+        if (!initData._scroll_id) throw new Error('No scroll_id returned. Check source cluster and index.');
+
+        total = initData.hits?.total?.value ?? initData.hits?.total ?? 0;
+        statTotal.textContent = total;
+        log(`Found ${total} documents to copy.`);
+
+        let scrollId = initData._scroll_id;
+        let hits     = initData.hits?.hits ?? [];
+
+        while (hits.length > 0 && !stopFlag) {
+          // Bulk index into destination
+          const bulkBody = hits.flatMap(hit => [
+            JSON.stringify({ index: { _index: dstIndex, _id: hit._id } }),
+            JSON.stringify(hit._source),
+          ]).join('\n') + '\n';
+
+          const bulkResp = await proxyRequest(
+            `${dstUrl}/_bulk`,
+            'POST',
+            { ...dstHeaders, 'Content-Type': 'application/x-ndjson' },
+            null
+          );
+          // Note: body is ndjson, not JSON — pass raw
+          // TODO: proxy needs raw body support for ndjson; workaround: send as JSON wrapper
+          const bulkData = JSON.parse(bulkResp.body);
+          if (bulkData.errors) {
+            const errCount = (bulkData.items ?? []).filter(i => i.index?.error).length;
+            errors += errCount;
+            statErrors.textContent = errors;
+            log(`Batch ${batches + 1}: ${errCount} bulk errors.`, 'err');
+          }
+
+          copied  += hits.length;
+          batches += 1;
+          statCopied.textContent  = copied;
+          statBatches.textContent = batches;
+          if (total > 0) progressFill.style.width = `${Math.min(100, (copied / total) * 100).toFixed(1)}%`;
+
+          log(`Batch ${batches}: indexed ${hits.length} docs (${copied}/${total})`);
+
+          // Scroll next page
+          const scrollResp = await proxyRequest(
+            `${srcUrl}/_search/scroll`,
+            'POST',
+            { ...srcHeaders, 'Content-Type': 'application/json' },
+            { scroll: '2m', scroll_id: scrollId }
+          );
+          const scrollData = JSON.parse(scrollResp.body);
+          scrollId = scrollData._scroll_id;
+          hits     = scrollData.hits?.hits ?? [];
+        }
+
+        // Clear scroll
+        await proxyRequest(
+          `${srcUrl}/_search/scroll`,
+          'DELETE',
+          { ...srcHeaders, 'Content-Type': 'application/json' },
+          { scroll_id: scrollId }
+        ).catch(() => {});
+
+        if (stopFlag) {
+          log(`Stopped by user after ${copied} documents.`, 'err');
+        } else {
+          progressFill.style.width = '100%';
+          log(`Done. Copied ${copied} documents in ${batches} batches. Errors: ${errors}.`, 'ok');
+        }
+      } catch (e) {
+        log(`Fatal error: ${e.message}`, 'err');
+      } finally {
+        running = false;
+        btnStart.disabled = false;
+        btnStop.disabled  = true;
+      }
+    }
+
+    btnStart.onclick = async () => {
+      if (running) return;
+      const proxyOk = await checkProxy();
+      if (!proxyOk) {
+        log('Proxy is not available. Start python app.py first.', 'err');
+        return;
+      }
+      await runCopy();
+    };
+
+    btnStop.onclick = () => { stopFlag = true; };
+
+    document.getElementById('btn-clear-log').onclick = () => { logEl.textContent = ''; };
+
+    // Check proxy on load
+    checkProxy();
+  </script>
+</body>
+</html>

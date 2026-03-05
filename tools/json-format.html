@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JSON Format & Validate</title>
+  <meta name="description" content="Format, validate, and minify JSON in the browser">
+  <style>
+    :root {
+      --bg:         #1e1e2e;
+      --surface:    #2a2a3d;
+      --accent:     #7c6af7;
+      --text:       #cdd6f4;
+      --text-muted: #6c7086;
+      --border:     #313244;
+      --success:    #a6e3a1;
+      --error:      #f38ba8;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 1rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    header a { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; }
+    header a:hover { color: var(--accent); }
+    header h1 { margin: 0; font-size: 1.2rem; }
+
+    main {
+      padding: 2rem;
+      max-width: 1100px;
+      margin: 0 auto;
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .indent-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.4rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.5rem 1.25rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: opacity 0.15s;
+    }
+
+    button:hover { opacity: 0.85; }
+
+    button.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .panes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      flex: 1;
+    }
+
+    @media (max-width: 700px) {
+      .panes { grid-template-columns: 1fr; }
+    }
+
+    .pane {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .pane label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    textarea {
+      flex: 1;
+      min-height: 400px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.82rem;
+      padding: 0.75rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus { border-color: var(--accent); }
+    textarea.err    { border-color: var(--error); }
+
+    .status {
+      font-size: 0.8rem;
+      font-family: monospace;
+      min-height: 1.2rem;
+    }
+
+    .status.ok  { color: var(--success); }
+    .status.err { color: var(--error); }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">← back</a>
+    <h1>JSON Format &amp; Validate</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <button id="btn-format">Format</button>
+      <button id="btn-minify" class="secondary">Minify</button>
+      <button id="btn-validate" class="secondary">Validate</button>
+      <button id="btn-clear" class="secondary">Clear</button>
+      <span class="indent-label">
+        Indent:
+        <select id="indent">
+          <option value="2" selected>2 spaces</option>
+          <option value="4">4 spaces</option>
+          <option value="	">tab</option>
+        </select>
+      </span>
+    </div>
+
+    <div class="panes">
+      <div class="pane">
+        <label for="input">Input</label>
+        <textarea id="input" placeholder='{"paste": "your JSON here"}' spellcheck="false"></textarea>
+      </div>
+      <div class="pane">
+        <label for="output">Output</label>
+        <textarea id="output" placeholder="Formatted output…" spellcheck="false" readonly></textarea>
+      </div>
+    </div>
+
+    <div class="status" id="status"></div>
+  </main>
+
+  <script>
+    const inputEl  = document.getElementById('input');
+    const outputEl = document.getElementById('output');
+    const statusEl = document.getElementById('status');
+    const indentEl = document.getElementById('indent');
+
+    function setStatus(msg, type = '') {
+      statusEl.textContent = msg;
+      statusEl.className = `status ${type}`;
+    }
+
+    function getIndent() {
+      const v = indentEl.value;
+      return v === '\t' ? '\t' : parseInt(v, 10);
+    }
+
+    function parseInput() {
+      return JSON.parse(inputEl.value);
+    }
+
+    document.getElementById('btn-format').onclick = () => {
+      inputEl.classList.remove('err');
+      try {
+        const parsed = parseInput();
+        outputEl.value = JSON.stringify(parsed, null, getIndent());
+        setStatus(`Valid JSON — ${countNodes(parsed)} nodes.`, 'ok');
+      } catch (e) {
+        inputEl.classList.add('err');
+        outputEl.value = '';
+        setStatus(`Parse error: ${e.message}`, 'err');
+      }
+    };
+
+    document.getElementById('btn-minify').onclick = () => {
+      inputEl.classList.remove('err');
+      try {
+        outputEl.value = JSON.stringify(parseInput());
+        setStatus('Minified.', 'ok');
+      } catch (e) {
+        inputEl.classList.add('err');
+        setStatus(`Parse error: ${e.message}`, 'err');
+      }
+    };
+
+    document.getElementById('btn-validate').onclick = () => {
+      inputEl.classList.remove('err');
+      try {
+        const parsed = parseInput();
+        setStatus(`Valid JSON — ${countNodes(parsed)} nodes.`, 'ok');
+      } catch (e) {
+        inputEl.classList.add('err');
+        setStatus(`Invalid JSON: ${e.message}`, 'err');
+      }
+    };
+
+    document.getElementById('btn-clear').onclick = () => {
+      inputEl.value = '';
+      outputEl.value = '';
+      inputEl.classList.remove('err');
+      setStatus('');
+    };
+
+    function countNodes(obj) {
+      if (typeof obj !== 'object' || obj === null) return 1;
+      return 1 + Object.values(obj).reduce((s, v) => s + countNodes(v), 0);
+    }
+
+    // Auto-format on paste
+    inputEl.addEventListener('paste', () => {
+      setTimeout(() => {
+        if (!inputEl.value.trim()) return;
+        try {
+          const parsed = JSON.parse(inputEl.value);
+          outputEl.value = JSON.stringify(parsed, null, getIndent());
+          inputEl.classList.remove('err');
+          setStatus(`Valid JSON — ${countNodes(parsed)} nodes.`, 'ok');
+        } catch (e) {
+          setStatus(`Parse error: ${e.message}`, 'err');
+        }
+      }, 0);
+    });
+  </script>
+</body>
+</html>

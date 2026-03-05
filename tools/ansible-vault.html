@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ansible Vault</title>
+  <meta name="description" content="Encrypt and decrypt Ansible Vault secrets in the browser">
+  <style>
+    :root {
+      --bg:         #1e1e2e;
+      --surface:    #2a2a3d;
+      --accent:     #7c6af7;
+      --text:       #cdd6f4;
+      --text-muted: #6c7086;
+      --border:     #313244;
+      --success:    #a6e3a1;
+      --error:      #f38ba8;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 1rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    header a { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; }
+    header a:hover { color: var(--accent); }
+    header h1 { margin: 0; font-size: 1.2rem; }
+
+    main {
+      padding: 2rem;
+      max-width: 900px;
+      margin: 0 auto;
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .notice {
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .password-wrap {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    input[type="password"], input[type="text"] {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.875rem;
+      padding: 0.5rem 0.75rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input:focus { border-color: var(--accent); }
+
+    .toolbar {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.5rem 1.25rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: opacity 0.15s;
+    }
+
+    button:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: default; }
+
+    button.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .panes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    @media (max-width: 640px) {
+      .panes { grid-template-columns: 1fr; }
+    }
+
+    .pane label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    textarea {
+      width: 100%;
+      height: 260px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.82rem;
+      padding: 0.75rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus { border-color: var(--accent); }
+
+    .status {
+      font-size: 0.8rem;
+      min-height: 1.2rem;
+    }
+
+    .status.ok  { color: var(--success); }
+    .status.err { color: var(--error); }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">← back</a>
+    <h1>Ansible Vault</h1>
+  </header>
+
+  <main>
+    <div class="notice">
+      All encryption and decryption is performed locally in your browser using the Web Crypto API.
+      No data leaves your machine.
+    </div>
+
+    <div class="field">
+      <label for="vault-pass">Vault password</label>
+      <div class="password-wrap">
+        <input type="password" id="vault-pass" placeholder="Enter vault password…" autocomplete="off">
+        <button class="secondary" id="btn-show-pass" title="Show/hide password">Show</button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button id="btn-encrypt">Encrypt →</button>
+      <button id="btn-decrypt">← Decrypt</button>
+      <button class="secondary" id="btn-clear">Clear</button>
+    </div>
+
+    <div class="panes">
+      <div class="pane">
+        <label for="plaintext">Plaintext</label>
+        <textarea id="plaintext" placeholder="Paste plaintext secret here…" spellcheck="false"></textarea>
+      </div>
+      <div class="pane">
+        <label for="ciphertext">Vault ciphertext</label>
+        <textarea id="ciphertext" placeholder="$ANSIBLE_VAULT;1.1;AES256&#10;…" spellcheck="false"></textarea>
+      </div>
+    </div>
+
+    <div class="status" id="status"></div>
+  </main>
+
+  <script>
+    // Ansible Vault 1.1 format — AES256-CTR + HMAC-SHA256, key derived via PBKDF2-SHA256
+    // Reference: https://docs.ansible.com/ansible/latest/vault_guide/vault_encrypting_content.html
+
+    const passEl       = document.getElementById('vault-pass');
+    const plaintextEl  = document.getElementById('plaintext');
+    const ciphertextEl = document.getElementById('ciphertext');
+    const statusEl     = document.getElementById('status');
+
+    function setStatus(msg, type = '') {
+      statusEl.textContent = msg;
+      statusEl.className = `status ${type}`;
+    }
+
+    document.getElementById('btn-show-pass').onclick = function () {
+      const show = passEl.type === 'password';
+      passEl.type = show ? 'text' : 'password';
+      this.textContent = show ? 'Hide' : 'Show';
+    };
+
+    function hexEncode(buf) {
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function hexDecode(hex) {
+      const bytes = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < hex.length; i += 2) bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+      return bytes;
+    }
+
+    async function deriveKeys(password, salt) {
+      const enc = new TextEncoder();
+      const keyMaterial = await crypto.subtle.importKey(
+        'raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']
+      );
+      const bits = await crypto.subtle.deriveBits(
+        { name: 'PBKDF2', salt, iterations: 10000, hash: 'SHA-256' },
+        keyMaterial, 320 // 32 (cipher key) + 32 (hmac key) + 16 (iv) = 80 bytes = 640 bits...
+        // Actually vault uses 80 bytes total
+      );
+      // Ansible vault derives 80 bytes: key1(32) + key2(32) + iv(16)
+      const allBytes = await crypto.subtle.deriveBits(
+        { name: 'PBKDF2', salt, iterations: 10000, hash: 'SHA-256' },
+        keyMaterial, 640
+      );
+      const buf = new Uint8Array(allBytes);
+      return {
+        cipherKey: buf.slice(0, 32),
+        hmacKey:   buf.slice(32, 64),
+        iv:        buf.slice(64, 80),
+      };
+    }
+
+    async function vaultEncrypt(plaintext, password) {
+      const enc = new TextEncoder();
+      const salt = crypto.getRandomValues(new Uint8Array(32));
+      const { cipherKey, hmacKey, iv } = await deriveKeys(password, salt);
+
+      const cipherKeyObj = await crypto.subtle.importKey('raw', cipherKey, { name: 'AES-CTR' }, false, ['encrypt']);
+      const ciphertext   = await crypto.subtle.encrypt({ name: 'AES-CTR', counter: iv, length: 128 }, cipherKeyObj, enc.encode(plaintext));
+
+      const hmacKeyObj = await crypto.subtle.importKey('raw', hmacKey, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      const hmac       = await crypto.subtle.sign('HMAC', hmacKeyObj, ciphertext);
+
+      const body = hexEncode(salt) + '\n' + hexEncode(hmac) + '\n' + hexEncode(ciphertext);
+      const bodyHex = hexEncode(new TextEncoder().encode(body));
+
+      // Wrap at 80 chars
+      const lines = bodyHex.match(/.{1,80}/g).join('\n');
+      return `$ANSIBLE_VAULT;1.1;AES256\n${lines}`;
+    }
+
+    async function vaultDecrypt(vaultText, password) {
+      const lines = vaultText.trim().split('\n');
+      const header = lines[0];
+      if (!header.startsWith('$ANSIBLE_VAULT;1.1;AES256')) throw new Error('Unsupported vault format');
+
+      const bodyHex = lines.slice(1).join('');
+      const body    = new TextDecoder().decode(hexDecode(bodyHex));
+      const [saltHex, hmacHex, ctHex] = body.split('\n');
+
+      const salt       = hexDecode(saltHex);
+      const hmacBytes  = hexDecode(hmacHex);
+      const ciphertext = hexDecode(ctHex);
+
+      const { cipherKey, hmacKey, iv } = await deriveKeys(password, salt);
+
+      // Verify HMAC
+      const hmacKeyObj   = await crypto.subtle.importKey('raw', hmacKey, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+      const valid        = await crypto.subtle.verify('HMAC', hmacKeyObj, hmacBytes, ciphertext);
+      if (!valid) throw new Error('HMAC verification failed — wrong password or corrupted data');
+
+      const cipherKeyObj = await crypto.subtle.importKey('raw', cipherKey, { name: 'AES-CTR' }, false, ['decrypt']);
+      const plainBuf     = await crypto.subtle.decrypt({ name: 'AES-CTR', counter: iv, length: 128 }, cipherKeyObj, ciphertext);
+
+      return new TextDecoder().decode(plainBuf);
+    }
+
+    document.getElementById('btn-encrypt').onclick = async () => {
+      const password = passEl.value;
+      const plaintext = plaintextEl.value;
+      if (!password) { setStatus('Enter a vault password first.', 'err'); return; }
+      if (!plaintext) { setStatus('Enter plaintext to encrypt.', 'err'); return; }
+      try {
+        ciphertextEl.value = await vaultEncrypt(plaintext, password);
+        setStatus('Encrypted successfully.', 'ok');
+      } catch (e) {
+        setStatus(`Encrypt error: ${e.message}`, 'err');
+      }
+    };
+
+    document.getElementById('btn-decrypt').onclick = async () => {
+      const password = passEl.value;
+      const vaultText = ciphertextEl.value.trim();
+      if (!password)  { setStatus('Enter a vault password first.', 'err'); return; }
+      if (!vaultText) { setStatus('Enter vault ciphertext to decrypt.', 'err'); return; }
+      try {
+        plaintextEl.value = await vaultDecrypt(vaultText, password);
+        setStatus('Decrypted successfully.', 'ok');
+      } catch (e) {
+        setStatus(`Decrypt error: ${e.message}`, 'err');
+      }
+    };
+
+    document.getElementById('btn-clear').onclick = () => {
+      plaintextEl.value = '';
+      ciphertextEl.value = '';
+      passEl.value = '';
+      setStatus('');
+    };
+  </script>
+</body>
+</html>

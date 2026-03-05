@@ -1,0 +1,30 @@
+[
+  {
+    "id": "base64",
+    "name": "Base64 Encode/Decode",
+    "description": "Encode or decode Base64 values",
+    "file": "tools/base64.html",
+    "proxy": false
+  },
+  {
+    "id": "ansible-vault",
+    "name": "Ansible Vault",
+    "description": "Encrypt and decrypt Ansible Vault secrets",
+    "file": "tools/ansible-vault.html",
+    "proxy": false
+  },
+  {
+    "id": "json-format",
+    "name": "JSON Format & Validate",
+    "description": "Format, validate, and minify JSON",
+    "file": "tools/json-format.html",
+    "proxy": false
+  },
+  {
+    "id": "es-copy",
+    "name": "Elasticsearch Cluster Copy",
+    "description": "Copy documents between Elasticsearch clusters",
+    "file": "tools/es-copy.html",
+    "proxy": true
+  }
+]
