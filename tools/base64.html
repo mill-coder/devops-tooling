@@ -79,13 +79,9 @@
     }
 
     .panes {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+      display: flex;
+      flex-direction: column;
       gap: 1rem;
-    }
-
-    @media (max-width: 640px) {
-      .panes { grid-template-columns: 1fr; }
     }
 
     .pane label {
