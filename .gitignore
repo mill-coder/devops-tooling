@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# direnv
+.direnv/
+
+# pytest
+.pytest_cache/
+
+# Secrets / local config
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
