@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ECS Validator</title>
+  <meta name="description" content="Validate JSON/NDJSON events against Elastic Common Schema field definitions">
+  <style>
+    :root {
+      --bg:         #1e1e2e;
+      --surface:    #2a2a3d;
+      --accent:     #7c6af7;
+      --text:       #cdd6f4;
+      --text-muted: #6c7086;
+      --border:     #313244;
+      --success:    #a6e3a1;
+      --error:      #f38ba8;
+      --warning:    #f9e2af;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 1rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    header a { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; }
+    header a:hover { color: var(--accent); }
+    header h1 { margin: 0; font-size: 1.2rem; flex: 1; }
+
+    .ecs-badge {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--accent) 20%, transparent);
+      color: var(--accent);
+    }
+
+    .loading-badge {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--warning) 20%, transparent);
+      color: var(--warning);
+    }
+
+    main {
+      padding: 2rem;
+      max-width: 1000px;
+      margin: 0 auto;
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.5rem 1.25rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: opacity 0.15s;
+    }
+
+    button:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    button.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .pane label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .pane-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 0.4rem;
+    }
+    .pane-header label {
+      margin-bottom: 0;
+      flex: 1;
+    }
+
+    textarea {
+      width: 100%;
+      height: 200px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+      padding: 0.75rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus { border-color: var(--accent); }
+
+    .results { display: flex; flex-direction: column; gap: 0.5rem; }
+
+    details {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    details summary {
+      padding: 0.6rem 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      user-select: none;
+      list-style: none;
+    }
+
+    details summary::-webkit-details-marker { display: none; }
+
+    details summary::before {
+      content: '▶';
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      transition: transform 0.15s;
+      flex-shrink: 0;
+    }
+
+    details[open] summary::before { transform: rotate(90deg); }
+
+    details summary:hover { background: var(--bg); border-radius: 6px; }
+
+    details > *:not(summary) { padding: 0 1rem 1rem; }
+
+    .summary-title { flex: 1; font-size: 0.875rem; }
+
+    .badge {
+      font-size: 0.7rem;
+      padding: 0.1rem 0.5rem;
+      border-radius: 999px;
+      flex-shrink: 0;
+    }
+
+    .badge.ok {
+      background: color-mix(in srgb, var(--success) 20%, transparent);
+      color: var(--success);
+    }
+
+    .badge.err {
+      background: color-mix(in srgb, var(--error) 20%, transparent);
+      color: var(--error);
+    }
+
+    .json-output {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.82rem;
+      white-space: pre;
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .field-err {
+      color: var(--error);
+      background: color-mix(in srgb, var(--error) 55%, transparent);
+      border-radius: 3px;
+      padding: 0 2px;
+      cursor: help;
+    }
+
+    .json-key { color: #89b4fa; }
+    .json-key-custom { color: #f9e2af; }
+    .json-string { color: #a6e3a1; }
+    .json-number { color: #fab387; }
+    .json-bool { color: #cba6f7; }
+    .json-null { color: var(--text-muted); }
+    .json-punct { color: var(--text-muted); }
+
+    .error-list {
+      margin: 0.75rem 0 0;
+      padding-left: 1.5rem;
+      font-size: 0.83rem;
+      color: var(--text-muted);
+    }
+
+    .error-list li { margin-bottom: 0.25rem; }
+    .error-list li code { color: var(--error); font-family: 'JetBrains Mono', monospace; }
+
+    .global-parse-error {
+      background: color-mix(in srgb, var(--error) 8%, transparent);
+      border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      font-size: 0.85rem;
+      color: var(--error);
+    }
+    .global-parse-error ul { margin: 0.4rem 0 0; padding-left: 1.5rem; }
+    .global-parse-error li { margin-bottom: 0.2rem; }
+    .global-parse-error code { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+
+    .copy-btn {
+      background: none; border: none; color: var(--text-muted);
+      cursor: pointer; font-size: 0.9rem; padding: 0.1rem 0.3rem;
+      border-radius: 4px; transition: color 0.15s;
+      margin-left: auto;
+    }
+    .copy-btn:hover { color: var(--accent); background: none; opacity: 1; }
+    .copy-btn.copied { color: var(--success); }
+
+    .status {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      min-height: 1.2rem;
+    }
+
+    .status.ok  { color: var(--success); }
+    .status.err { color: var(--error); }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">&#8592; back</a>
+    <h1>ECS Validator</h1>
+    <span id="version-badge" class="loading-badge">loading&#8230;</span>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <button id="btn-validate" disabled>Validate</button>
+      <button class="secondary" id="btn-clear">Clear</button>
+    </div>
+
+    <div class="pane">
+      <label for="input">Input — JSON or NDJSON (one or more documents, compact or pretty-printed)</label>
+      <textarea id="input" placeholder='{"@timestamp":"2024-01-01","agent":{"name":"filebeat"},"bad_field":42}' spellcheck="false"></textarea>
+    </div>
+
+    <div class="pane">
+      <div class="pane-header">
+        <label>Results</label>
+        <button class="copy-btn" id="btn-copy-all" disabled title="Copy all as JSON">&#x2398;</button>
+      </div>
+      <div class="results" id="results"></div>
+    </div>
+
+    <div class="status" id="status"></div>
+  </main>
+
+  <script>
+    // ── State ─────────────────────────────────────────────────────────────────
+    let ecsFields = {};
+    let ecsVersion = '';
+    let fieldsReady = false;
+    const customFieldKeys = new Set();
+
+    // Precompute namespace prefixes: for each field "a.b.c", store "a", "a.b"
+    const namespacePrefixes = new Set();
+
+    // ── Field loading ─────────────────────────────────────────────────────────
+    async function loadFields() {
+      const badge = document.getElementById('version-badge');
+      const btn   = document.getElementById('btn-validate');
+      try {
+        const r = await fetch('./ecs-fields.json');
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        ecsVersion = data.version || '';
+        Object.assign(ecsFields, data.fields || {});
+
+        // Custom fields (optional – 404 is silently ignored)
+        try {
+          const r2 = await fetch('./ecs-custom-fields.json');
+          if (r2.ok) {
+            const custom = await r2.json();
+            for (const [k, v] of Object.entries(custom.fields || {})) {
+              if (!k.startsWith('_')) {
+                ecsFields[k] = v;
+                customFieldKeys.add(k);
+              }
+            }
+          }
+        } catch { /* ignore */ }
+
+        // Build namespace prefix set
+        for (const key of Object.keys(ecsFields)) {
+          const parts = key.split('.');
+          for (let i = 1; i < parts.length; i++) {
+            namespacePrefixes.add(parts.slice(0, i).join('.'));
+          }
+        }
+
+        fieldsReady = true;
+        badge.textContent = `ECS ${ecsVersion}`;
+        badge.className = 'ecs-badge';
+        btn.disabled = false;
+      } catch (e) {
+        badge.textContent = 'load error';
+        badge.className = 'loading-badge';
+        setStatus(`Failed to load ECS field definitions: ${e.message}`, 'err');
+      }
+    }
+
+    // ── Document parsing (supports compact NDJSON + pretty-printed multi-doc) ──
+    function parseDocuments(text) {
+      const records = [];
+      const parseErrors = [];
+      let depth = 0, inString = false, escape = false;
+      let start = -1, startLine = 1, currentLine = 1;
+
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === '\n') currentLine++;
+        if (escape) { escape = false; continue; }
+        if (inString) {
+          if (ch === '\\') escape = true;
+          else if (ch === '"') inString = false;
+          continue;
+        }
+        if (ch === '"') { inString = true; continue; }
+        if (ch === '{' || ch === '[') {
+          if (depth === 0) { start = i; startLine = currentLine; }
+          depth++;
+        } else if (ch === '}' || ch === ']') {
+          if (--depth === 0 && start !== -1) {
+            const chunk = text.slice(start, i + 1);
+            try {
+              records.push({ index: records.length + 1, data: JSON.parse(chunk), startLine });
+            } catch (e) {
+              parseErrors.push({ startLine, snippet: chunk.slice(0, 80), message: e.message });
+            }
+            start = -1;
+          }
+        }
+      }
+      if (start !== -1) {
+        parseErrors.push({ startLine, snippet: text.slice(start, start + 80), message: 'Unexpected end of input' });
+      }
+      return { records, parseErrors };
+    }
+
+    // ── Type compatibility ────────────────────────────────────────────────────
+    const TYPE_COMPAT = {
+      string:  ['keyword','text','wildcard','constant_keyword','match_only_text','date','ip','geo_point','scaled_float'],
+      integer: ['long','integer','float','double','scaled_float'],
+      float:   ['float','double','scaled_float'],
+      boolean: ['boolean'],
+      object:  ['object','nested','flattened','geo_point'],
+      array:   ['flattened','keyword','nested'],
+    };
+
+    function jsType(value) {
+      if (value === null) return 'null';
+      if (Array.isArray(value)) return 'array';
+      if (Number.isInteger(value)) return 'integer';
+      if (typeof value === 'number') return 'float';
+      return typeof value; // string, boolean, object
+    }
+
+    function checkField(path, value) {
+      // Keys starting with _ are always silently skipped (metadata)
+      const lastName = path.split('.').pop();
+      if (lastName.startsWith('_')) return null;
+
+      const def = ecsFields[path];
+
+      if (!def) {
+        // If path is a valid namespace container (e.g. "agent" when "agent.name" exists), skip
+        if (namespacePrefixes.has(path)) return null;
+        return { path, kind: 'unknown', message: `unknown field (not in ECS ${ecsVersion})` };
+      }
+
+      // Type check
+      const jt = jsType(value);
+      if (jt === 'null') return null; // null is always compatible
+      if (jt === 'object') return null; // object handled by recursion; already resolved
+
+      const compatible = TYPE_COMPAT[jt] || [];
+      if (!compatible.includes(def.type)) {
+        return { path, kind: 'type', message: `type mismatch: got ${jt}, expected ${def.type}` };
+      }
+
+      return null;
+    }
+
+    // ── Field traversal ───────────────────────────────────────────────────────
+    function traverseFields(obj, prefix) {
+      const errors = [];
+      for (const [key, value] of Object.entries(obj)) {
+        const path = prefix ? `${prefix}.${key}` : key;
+        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+          // Recurse; also check the container itself unless it's a known namespace
+          errors.push(...traverseFields(value, path));
+        } else {
+          const err = checkField(path, value);
+          if (err) errors.push(err);
+        }
+      }
+      return errors;
+    }
+
+    // ── Validation ────────────────────────────────────────────────────────────
+    function validate(data) {
+      const errors = traverseFields(data, '');
+      return errors;
+    }
+
+    // ── JSON → highlighted HTML ───────────────────────────────────────────────
+    function escHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function renderValue(value, path, errorMap, indent) {
+      const jt = jsType(value);
+      if (value === null) return `<span class="json-null">null</span>`;
+      if (jt === 'boolean') return `<span class="json-bool">${value}</span>`;
+      if (jt === 'integer' || jt === 'float') {
+        const err = errorMap.get(path);
+        const inner = `<span class="json-number">${value}</span>`;
+        return err ? `<span class="field-err" title="${escHtml(err.message)}">${inner}</span>` : inner;
+      }
+      if (jt === 'string') {
+        const err = errorMap.get(path);
+        const inner = `<span class="json-string">${escHtml(JSON.stringify(value))}</span>`;
+        return err ? `<span class="field-err" title="${escHtml(err.message)}">${inner}</span>` : inner;
+      }
+      if (Array.isArray(value)) {
+        if (value.length === 0) return '<span class="json-punct">[]</span>';
+        const pad = '  '.repeat(indent + 1);
+        const closePad = '  '.repeat(indent);
+        const items = value.map((item, i) => {
+          return `${pad}${renderValue(item, path, errorMap, indent + 1)}`;
+        }).join('<span class="json-punct">,</span>\n');
+        return `<span class="json-punct">[</span>\n${items}\n${closePad}<span class="json-punct">]</span>`;
+      }
+      if (jt === 'object') {
+        return renderObject(value, path, errorMap, indent);
+      }
+      return escHtml(JSON.stringify(value));
+    }
+
+    function keyClass(path, hasError) {
+      if (hasError) return null;
+      if (customFieldKeys.has(path)) return 'json-key-custom';
+      return 'json-key';
+    }
+
+    function renderObject(obj, pathPrefix, errorMap, indent) {
+      const entries = Object.entries(obj);
+      if (entries.length === 0) return '<span class="json-punct">{}</span>';
+      const pad = '  '.repeat(indent + 1);
+      const closePad = '  '.repeat(indent);
+      const lines = entries.map(([key, value], i) => {
+        const path = pathPrefix ? `${pathPrefix}.${key}` : key;
+        const err = errorMap.get(path);
+        const isLast = i === entries.length - 1;
+        const comma = isLast ? '' : '<span class="json-punct">,</span>';
+        const cls = keyClass(path, !!err);
+
+        const renderedKey = err
+          ? `<span class="field-err" title="${escHtml(err.message)}"><span class="json-key">${escHtml(JSON.stringify(key))}</span></span>`
+          : `<span class="${cls}">${escHtml(JSON.stringify(key))}</span>`;
+
+        const renderedValue = renderValue(value, path, errorMap, indent + 1);
+        return `${pad}${renderedKey}<span class="json-punct">: </span>${renderedValue}${comma}`;
+      });
+      return `<span class="json-punct">{</span>\n${lines.join('\n')}\n${closePad}<span class="json-punct">}</span>`;
+    }
+
+    // ── Render a single record ────────────────────────────────────────────────
+    function renderRecord(record, isOpen) {
+      const errors = validate(record.data);
+      const hasErrors = errors.length > 0;
+      const errorMap = new Map(errors.map(e => [e.path, e]));
+      const html = renderObject(record.data, '', errorMap, 0);
+
+      const badgeHtml = hasErrors
+        ? `<span class="badge err">${errors.length} error${errors.length > 1 ? 's' : ''}</span>`
+        : `<span class="badge ok">valid</span>`;
+
+      const errorListHtml = hasErrors
+        ? `<ul class="error-list">${errors.map(e =>
+            `<li><code>${escHtml(e.path)}</code> &mdash; ${escHtml(e.message)}</li>`
+          ).join('')}</ul>`
+        : '';
+
+      return `
+        <details ${isOpen ? 'open' : ''}>
+          <summary>
+            <span class="summary-title">JSON #${record.index}</span>
+            ${badgeHtml}
+            <button class="copy-btn" title="Copy JSON" data-index="${record.index - 1}">&#x2398;</button>
+          </summary>
+          <pre class="json-output">${html}</pre>
+          ${errorListHtml}
+        </details>`;
+    }
+
+    // ── Clipboard helper ──────────────────────────────────────────────────────
+    function copyToClipboard(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+      }
+      // Fallback for file:// contexts
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      return Promise.resolve();
+    }
+
+    // ── Main validate action ──────────────────────────────────────────────────
+    let parsedRecordsData = [];
+
+    function runValidate() {
+      if (!fieldsReady) return;
+
+      const text = document.getElementById('input').value.trim();
+      const resultsEl = document.getElementById('results');
+      if (!text) {
+        resultsEl.innerHTML = '';
+        parsedRecordsData = [];
+        setStatus('');
+        return;
+      }
+
+      const { records, parseErrors } = parseDocuments(text);
+      parsedRecordsData = records.map(r => r.data);
+
+      const allValid = records.length > 0 && parseErrors.length === 0 &&
+        records.every(r => validate(r.data).length === 0);
+
+      // Global parse error panel
+      let parseErrorHtml = '';
+      if (parseErrors.length > 0) {
+        const items = parseErrors.map(pe =>
+          `<li>Line ${pe.startLine}: <code>${escHtml(pe.snippet)}</code> &mdash; ${escHtml(pe.message)}</li>`
+        ).join('');
+        parseErrorHtml = `<div class="global-parse-error">
+          <strong>Parse error &mdash; ${parseErrors.length} document${parseErrors.length > 1 ? 's' : ''} could not be read:</strong>
+          <ul>${items}</ul>
+        </div>`;
+      }
+
+      // Compute validation results for stats
+      let totalFields = 0;
+      let totalUnknown = 0;
+      let totalTypeMismatch = 0;
+
+      const htmlParts = records.map((record, i) => {
+        const errors = validate(record.data);
+        const isOpen = errors.length > 0 || (allValid && i === 0);
+        totalFields += countFields(record.data);
+        for (const e of errors) {
+          if (e.kind === 'unknown') totalUnknown++;
+          else if (e.kind === 'type') totalTypeMismatch++;
+        }
+        return renderRecord(record, isOpen);
+      });
+
+      resultsEl.innerHTML = parseErrorHtml + htmlParts.join('');
+      document.getElementById('btn-copy-all').disabled = parsedRecordsData.length === 0;
+
+      const parts = [`${records.length} record${records.length > 1 ? 's' : ''}`, `${totalFields} fields validated`];
+      if (parseErrors.length) parts.push(`${parseErrors.length} parse error${parseErrors.length > 1 ? 's' : ''}`);
+      if (totalUnknown) parts.push(`${totalUnknown} unknown`);
+      if (totalTypeMismatch) parts.push(`${totalTypeMismatch} type mismatch${totalTypeMismatch > 1 ? 'es' : ''}`);
+      setStatus(parts.join(' · '));
+    }
+
+    function countFields(obj, prefix) {
+      let count = 0;
+      for (const [key, value] of Object.entries(obj)) {
+        const path = prefix ? `${prefix}.${key}` : key;
+        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+          count += countFields(value, path);
+        } else {
+          count++;
+        }
+      }
+      return count;
+    }
+
+    // ── UI helpers ────────────────────────────────────────────────────────────
+    function setStatus(msg, cls) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = cls ? `status ${cls}` : 'status';
+    }
+
+    document.getElementById('btn-validate').onclick = runValidate;
+
+    document.getElementById('btn-clear').onclick = () => {
+      document.getElementById('input').value = '';
+      document.getElementById('results').innerHTML = '';
+      parsedRecordsData = [];
+      document.getElementById('btn-copy-all').disabled = true;
+      setStatus('');
+    };
+
+    document.getElementById('btn-copy-all').onclick = function() {
+      if (parsedRecordsData.length === 0) return;
+      const text = parsedRecordsData.map(d => JSON.stringify(d, null, 2)).join('\n\n');
+      const btn = this;
+      copyToClipboard(text).then(() => {
+        btn.textContent = '✓';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = '⎘'; btn.classList.remove('copied'); }, 1500);
+      });
+    };
+
+    // Delegated copy handler
+    document.getElementById('results').addEventListener('click', e => {
+      const btn = e.target.closest('.copy-btn');
+      if (!btn) return;
+      e.stopPropagation(); // don't toggle <details>
+      const idx = parseInt(btn.dataset.index, 10);
+      const data = parsedRecordsData[idx];
+      if (data == null) return;
+      copyToClipboard(JSON.stringify(data, null, 2)).then(() => {
+        btn.textContent = '✓';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = '⎘'; btn.classList.remove('copied'); }, 1500);
+      });
+    });
+
+    // Ctrl+Enter to validate
+    document.getElementById('input').addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runValidate();
+    });
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    loadFields();
+  </script>
+</body>
+</html>

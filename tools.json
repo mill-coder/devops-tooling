@@ -26,5 +26,12 @@
     "description": "Copy documents between Elasticsearch clusters",
     "file": "tools/es-copy.html",
     "proxy": true
+  },
+  {
+    "id": "ecs-validator",
+    "name": "ECS Validator",
+    "description": "Validate JSON/NDJSON events against Elastic Common Schema field definitions",
+    "file": "tools/ecs-validator.html",
+    "proxy": false
   }
 ]

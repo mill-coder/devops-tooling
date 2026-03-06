@@ -1,0 +1,10 @@
+{
+  "version": "custom",
+  "fields": {
+    "my.custom.field": {
+      "type": "keyword",
+      "level": "custom",
+      "description": "Example — replace or remove this entry"
+    }
+  }
+}

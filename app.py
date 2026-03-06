@@ -29,6 +29,16 @@ def serve_tool(name):
     return send_from_directory("tools", f"{name}.html")
 
 
+ALLOWED_TOOL_DATA = {"ecs-fields", "ecs-custom-fields"}
+
+
+@app.route("/tools/<name>.json")
+def serve_tool_data(name):
+    if name not in ALLOWED_TOOL_DATA:
+        return jsonify({"error": "Not found"}), 404
+    return send_from_directory("tools", f"{name}.json")
+
+
 @app.route("/proxy", methods=["POST"])
 def proxy():
     data = request.get_json()
