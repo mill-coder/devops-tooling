@@ -115,6 +115,16 @@
       color: var(--text-muted);
     }
 
+    .pane-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 0.4rem;
+    }
+    .pane-header label {
+      margin-bottom: 0;
+      flex: 1;
+    }
+
     textarea {
       overflow-y: hidden;
       background: var(--surface);
@@ -166,16 +176,17 @@
 
     <div class="panes">
       <div class="pane">
-        <label for="input">Input</label>
+        <label for="input">Input — JSON or NDJSON (one or more documents, compact or pretty-printed)</label>
         <textarea id="input" rows="6" placeholder='{"paste": "your JSON here"}' spellcheck="false"></textarea>
       </div>
       <div class="pane">
-        <label for="output">Output</label>
+        <div class="pane-header">
+          <label for="output">Output</label>
+          <span id="status" class="status"></span>
+        </div>
         <textarea id="output" rows="6" placeholder="Formatted output…" spellcheck="false" readonly></textarea>
       </div>
     </div>
-
-    <div class="status" id="status"></div>
   </main>
 
   <script>
@@ -199,45 +210,89 @@
       return v === '\t' ? '\t' : parseInt(v, 10);
     }
 
-    function parseInput() {
-      return JSON.parse(inputEl.value);
+    function parseDocuments(text) {
+      const records = [];
+      const parseErrors = [];
+      let depth = 0, inString = false, escape = false;
+      let start = -1, startLine = 1, currentLine = 1;
+
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === '\n') currentLine++;
+        if (escape) { escape = false; continue; }
+        if (inString) {
+          if (ch === '\\') escape = true;
+          else if (ch === '"') inString = false;
+          continue;
+        }
+        if (ch === '"') { inString = true; continue; }
+        if (ch === '{' || ch === '[') {
+          if (depth === 0) { start = i; startLine = currentLine; }
+          depth++;
+        } else if (ch === '}' || ch === ']') {
+          if (--depth === 0 && start !== -1) {
+            const chunk = text.slice(start, i + 1);
+            try {
+              records.push({ index: records.length + 1, data: JSON.parse(chunk), startLine });
+            } catch (e) {
+              parseErrors.push({ startLine, snippet: chunk.slice(0, 80), message: e.message });
+            }
+            start = -1;
+          }
+        }
+      }
+      if (start !== -1) {
+        parseErrors.push({ startLine, snippet: text.slice(start, start + 80), message: 'Unexpected end of input' });
+      }
+      return { records, parseErrors };
+    }
+
+    function countNodes(obj) {
+      if (typeof obj !== 'object' || obj === null) return 1;
+      return 1 + Object.values(obj).reduce((s, v) => s + countNodes(v), 0);
+    }
+
+    function applyResult({ records, parseErrors }) {
+      inputEl.classList.toggle('err', parseErrors.length > 0);
+      if (parseErrors.length > 0 && records.length === 0) {
+        setStatus(`parse error: ${parseErrors[0].message}`, 'err');
+      } else if (parseErrors.length > 0) {
+        setStatus(`${records.length} parsed · ${parseErrors.length} parse error(s)`, 'err');
+      } else if (records.length === 1) {
+        const nodes = countNodes(records[0].data);
+        setStatus(`valid · ${nodes} nodes`, 'ok');
+      } else {
+        const nodes = records.reduce((s, r) => s + countNodes(r.data), 0);
+        setStatus(`${records.length} documents · ${nodes} nodes total`, 'ok');
+      }
+      return records;
     }
 
     document.getElementById('btn-format').onclick = () => {
-      inputEl.classList.remove('err');
-      try {
-        const parsed = parseInput();
-        outputEl.value = JSON.stringify(parsed, null, getIndent());
-        setStatus(`Valid JSON — ${countNodes(parsed)} nodes.`, 'ok');
-      } catch (e) {
-        inputEl.classList.add('err');
+      const { records, parseErrors } = parseDocuments(inputEl.value);
+      applyResult({ records, parseErrors });
+      if (records.length > 0) {
+        outputEl.value = records.map(r => JSON.stringify(r.data, null, getIndent())).join('\n\n');
+        autoResize(outputEl);
+      } else {
         outputEl.value = '';
-        setStatus(`Parse error: ${e.message}`, 'err');
       }
-      autoResize(outputEl);
     };
 
     document.getElementById('btn-minify').onclick = () => {
-      inputEl.classList.remove('err');
-      try {
-        outputEl.value = JSON.stringify(parseInput());
-        setStatus('Minified.', 'ok');
-      } catch (e) {
-        inputEl.classList.add('err');
-        setStatus(`Parse error: ${e.message}`, 'err');
+      const { records, parseErrors } = parseDocuments(inputEl.value);
+      applyResult({ records, parseErrors });
+      if (records.length > 0) {
+        outputEl.value = records.map(r => JSON.stringify(r.data)).join('\n');
+        autoResize(outputEl);
+      } else {
+        outputEl.value = '';
       }
-      autoResize(outputEl);
     };
 
     document.getElementById('btn-validate').onclick = () => {
-      inputEl.classList.remove('err');
-      try {
-        const parsed = parseInput();
-        setStatus(`Valid JSON — ${countNodes(parsed)} nodes.`, 'ok');
-      } catch (e) {
-        inputEl.classList.add('err');
-        setStatus(`Invalid JSON: ${e.message}`, 'err');
-      }
+      const { records, parseErrors } = parseDocuments(inputEl.value);
+      applyResult({ records, parseErrors });
     };
 
     document.getElementById('btn-clear').onclick = () => {
@@ -249,11 +304,6 @@
       autoResize(outputEl);
     };
 
-    function countNodes(obj) {
-      if (typeof obj !== 'object' || obj === null) return 1;
-      return 1 + Object.values(obj).reduce((s, v) => s + countNodes(v), 0);
-    }
-
     inputEl.addEventListener('input', () => autoResize(inputEl));
 
     // Auto-format on paste
@@ -261,14 +311,11 @@
       setTimeout(() => {
         autoResize(inputEl);
         if (!inputEl.value.trim()) return;
-        try {
-          const parsed = JSON.parse(inputEl.value);
-          outputEl.value = JSON.stringify(parsed, null, getIndent());
-          inputEl.classList.remove('err');
-          setStatus(`Valid JSON — ${countNodes(parsed)} nodes.`, 'ok');
+        const { records, parseErrors } = parseDocuments(inputEl.value);
+        applyResult({ records, parseErrors });
+        if (records.length > 0) {
+          outputEl.value = records.map(r => JSON.stringify(r.data, null, getIndent())).join('\n\n');
           autoResize(outputEl);
-        } catch (e) {
-          setStatus(`Parse error: ${e.message}`, 'err');
         }
       }, 0);
     });

@@ -129,7 +129,7 @@
 
     textarea {
       width: 100%;
-      height: 260px;
+      overflow-y: hidden;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -182,11 +182,11 @@
     <div class="panes">
       <div class="pane">
         <label for="plaintext">Plaintext</label>
-        <textarea id="plaintext" placeholder="Paste plaintext secret here…" spellcheck="false"></textarea>
+        <textarea id="plaintext" rows="6" placeholder="Paste plaintext secret here…" spellcheck="false"></textarea>
       </div>
       <div class="pane">
         <label for="ciphertext">Vault ciphertext</label>
-        <textarea id="ciphertext" placeholder="$ANSIBLE_VAULT;1.1;AES256&#10;…" spellcheck="false"></textarea>
+        <textarea id="ciphertext" rows="6" placeholder="$ANSIBLE_VAULT;1.1;AES256&#10;…" spellcheck="false"></textarea>
       </div>
     </div>
 
@@ -201,6 +201,11 @@
     const plaintextEl  = document.getElementById('plaintext');
     const ciphertextEl = document.getElementById('ciphertext');
     const statusEl     = document.getElementById('status');
+
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    }
 
     function setStatus(msg, type = '') {
       statusEl.textContent = msg;
@@ -299,6 +304,7 @@
       try {
         ciphertextEl.value = await vaultEncrypt(plaintext, password);
         setStatus('Encrypted successfully.', 'ok');
+        autoResize(ciphertextEl);
       } catch (e) {
         setStatus(`Encrypt error: ${e.message}`, 'err');
       }
@@ -312,6 +318,7 @@
       try {
         plaintextEl.value = await vaultDecrypt(vaultText, password);
         setStatus('Decrypted successfully.', 'ok');
+        autoResize(plaintextEl);
       } catch (e) {
         setStatus(`Decrypt error: ${e.message}`, 'err');
       }
@@ -322,7 +329,11 @@
       ciphertextEl.value = '';
       passEl.value = '';
       setStatus('');
+      autoResize(plaintextEl);
+      autoResize(ciphertextEl);
     };
+
+    plaintextEl.addEventListener('input', () => autoResize(plaintextEl));
   </script>
 </body>
 </html>
