@@ -31,6 +31,9 @@ def serve_tool(name):
 
 ALLOWED_TOOL_DATA = {"ecs-fields", "ecs-custom-fields"}
 
+_proxy_prefixes_raw = os.environ.get("PROXY_ALLOWED_PREFIXES", "")
+PROXY_ALLOWED_PREFIXES = [p.strip() for p in _proxy_prefixes_raw.split(",") if p.strip()]
+
 
 @app.route("/tools/<name>.json")
 def serve_tool_data(name):
@@ -45,6 +48,10 @@ def proxy():
     if not data or "url" not in data:
         return jsonify({"error": "Missing url"}), 400
 
+    url = data["url"]
+    if PROXY_ALLOWED_PREFIXES and not any(url.startswith(p) for p in PROXY_ALLOWED_PREFIXES):
+        return jsonify({"error": "URL not in allowed prefixes"}), 403
+
     method = data.get("method", "GET").upper()
     headers = data.get("headers", {})
     body = data.get("body")
@@ -52,7 +59,7 @@ def proxy():
     try:
         resp = requests.request(
             method=method,
-            url=data["url"],
+            url=url,
             headers=headers,
             data=body,
             timeout=30,

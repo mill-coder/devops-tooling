@@ -37,6 +37,12 @@ Response:
 
 **Security**: The proxy is intended for local development and trusted internal networks only. Do not expose it publicly without adding authentication. Tools should check proxy availability on load and display a warning banner if it is unreachable.
 
+## Configuration
+
+| Variable                 | Default   | Description |
+|--------------------------|-----------|-------------|
+| `PROXY_ALLOWED_PREFIXES` | *(unset)* | Comma-separated URL prefixes the proxy will forward to. When unset, all URLs are allowed. Example: `https://es.internal/,https://kibana.internal/` |
+
 ## Conventions
 
 - Keep `app.py` small. No business logic, no templating, no database.
