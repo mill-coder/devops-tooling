@@ -17,7 +17,8 @@ tooling/
 ├── app.py              # Flask backend (optional)
 ├── tools.json          # Tool registry — source of truth for all tools
 ├── index.html          # Landing page
-├── tools/              # One .html file per tool
+├── tools/              # One .html file per tool + static data files (.json)
+├── scripts/            # Offline helper scripts (e.g. ECS field generation)
 ├── static/             # shared.css, favicon
 ├── doc/                # Detailed documentation (see below)
 ├── Dockerfile

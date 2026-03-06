@@ -43,6 +43,7 @@ Copy this `:root` block verbatim into each tool's `<style>`:
   --border:     #313244;
   --success:    #a6e3a1;
   --error:      #f38ba8;
+  --warning:    #f9e2af;
 }
 ```
 
@@ -56,6 +57,7 @@ Copy this `:root` block verbatim into each tool's `<style>`:
 | Border     | `--border`     | `#313244` |
 | Success    | `--success`    | `#a6e3a1` |
 | Error      | `--error`      | `#f38ba8` |
+| Warning    | `--warning`    | `#f9e2af` |
 
 ## Standard UI Patterns
 

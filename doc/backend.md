@@ -4,12 +4,13 @@ The backend is a minimal Flask app (`app.py`). It is **optional** — tools that
 
 ## Routes
 
-| Method | Path            | Description |
-|--------|-----------------|-------------|
-| `GET`  | `/`             | Serves `index.html` |
-| `GET`  | `/tools.json`   | Serves the tool manifest |
-| `GET`  | `/tools/<name>` | Serves `tools/<name>.html`; returns 404 if not in registry |
-| `POST` | `/proxy`        | CORS proxy — forwards an HTTP request on behalf of the browser |
+| Method | Path                 | Description |
+|--------|----------------------|-------------|
+| `GET`  | `/`                  | Serves `index.html` |
+| `GET`  | `/tools.json`        | Serves the tool manifest |
+| `GET`  | `/tools/<name>`      | Serves `tools/<name>.html`; returns 404 if not in registry |
+| `GET`  | `/tools/<name>.json` | Serves static data files for a tool (allowlist-gated; e.g. `ecs-fields.json`) |
+| `POST` | `/proxy`             | CORS proxy — forwards an HTTP request on behalf of the browser |
 
 ## CORS Proxy
 

@@ -22,7 +22,7 @@
   },
   {
     "id": "es-copy",
-    "name": "Elasticsearch Cluster Copy",
+    "name": "Elasticsearch copy",
     "description": "Copy documents between Elasticsearch clusters",
     "file": "tools/es-copy.html",
     "proxy": true
