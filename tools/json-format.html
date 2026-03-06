@@ -116,8 +116,7 @@
     }
 
     textarea {
-      flex: 1;
-      min-height: 400px;
+      overflow-y: hidden;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -168,11 +167,11 @@
     <div class="panes">
       <div class="pane">
         <label for="input">Input</label>
-        <textarea id="input" placeholder='{"paste": "your JSON here"}' spellcheck="false"></textarea>
+        <textarea id="input" rows="6" placeholder='{"paste": "your JSON here"}' spellcheck="false"></textarea>
       </div>
       <div class="pane">
         <label for="output">Output</label>
-        <textarea id="output" placeholder="Formatted output…" spellcheck="false" readonly></textarea>
+        <textarea id="output" rows="6" placeholder="Formatted output…" spellcheck="false" readonly></textarea>
       </div>
     </div>
 
@@ -184,6 +183,11 @@
     const outputEl = document.getElementById('output');
     const statusEl = document.getElementById('status');
     const indentEl = document.getElementById('indent');
+
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    }
 
     function setStatus(msg, type = '') {
       statusEl.textContent = msg;
@@ -210,6 +214,7 @@
         outputEl.value = '';
         setStatus(`Parse error: ${e.message}`, 'err');
       }
+      autoResize(outputEl);
     };
 
     document.getElementById('btn-minify').onclick = () => {
@@ -221,6 +226,7 @@
         inputEl.classList.add('err');
         setStatus(`Parse error: ${e.message}`, 'err');
       }
+      autoResize(outputEl);
     };
 
     document.getElementById('btn-validate').onclick = () => {
@@ -239,6 +245,8 @@
       outputEl.value = '';
       inputEl.classList.remove('err');
       setStatus('');
+      autoResize(inputEl);
+      autoResize(outputEl);
     };
 
     function countNodes(obj) {
@@ -246,15 +254,19 @@
       return 1 + Object.values(obj).reduce((s, v) => s + countNodes(v), 0);
     }
 
+    inputEl.addEventListener('input', () => autoResize(inputEl));
+
     // Auto-format on paste
     inputEl.addEventListener('paste', () => {
       setTimeout(() => {
+        autoResize(inputEl);
         if (!inputEl.value.trim()) return;
         try {
           const parsed = JSON.parse(inputEl.value);
           outputEl.value = JSON.stringify(parsed, null, getIndent());
           inputEl.classList.remove('err');
           setStatus(`Valid JSON — ${countNodes(parsed)} nodes.`, 'ok');
+          autoResize(outputEl);
         } catch (e) {
           setStatus(`Parse error: ${e.message}`, 'err');
         }
