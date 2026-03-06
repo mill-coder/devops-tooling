@@ -42,6 +42,11 @@ def serve_tool_data(name):
     return send_from_directory("tools", f"{name}.json")
 
 
+@app.route("/api/ping")
+def ping():
+    return jsonify({"ok": True})
+
+
 @app.route("/proxy", methods=["POST"])
 def proxy():
     data = request.get_json()

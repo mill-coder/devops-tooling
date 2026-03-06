@@ -138,19 +138,18 @@
 
     async function checkBackend() {
       try {
-        const r = await fetch('/tools.json', { signal: AbortSignal.timeout(1000) });
+        const r = await fetch('/api/ping', { signal: AbortSignal.timeout(1000) });
         return r.ok;
       } catch {
         return false;
       }
     }
 
-    function toolUrl(tool) {
-      if (window.location.protocol === 'file:') return tool.file;
-      return `/tools/${tool.id}`;
-    }
-
-    function render(tools) {
+    function render(tools, backendUp) {
+      function toolUrl(tool) {
+        if (!backendUp) return tool.file;
+        return `/tools/${tool.id}`;
+      }
       const grid = document.getElementById('grid');
       grid.innerHTML = '';
       tools.forEach(tool => {
@@ -172,8 +171,7 @@
       const backendUp = await checkBackend();
 
       try {
-        const src = window.location.protocol === 'file:' ? 'tools.json' : '/tools.json';
-        const resp = await fetch(src);
+        const resp = await fetch('tools.json');
         if (!resp.ok) throw new Error(resp.statusText);
         allTools = await resp.json();
       } catch (e) {
@@ -186,7 +184,7 @@
         document.getElementById('proxy-notice').style.display = '';
       }
 
-      render(allTools);
+      render(allTools, backendUp);
     }
 
     init();
